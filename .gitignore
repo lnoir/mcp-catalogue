@@ -1,0 +1,12 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+
+# Server implementations (environment-specific)
+servers/*/
+
+# Keep server directory structure
+!servers/.gitkeep
+
+# Environment-specific configs
+servers.json
