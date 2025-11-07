@@ -5,7 +5,8 @@
   "type": "module",
   "packageManager": "pnpm@9.12.1",
   "scripts": {
-    "discover": "tsx index.ts"
+    "discover": "tsx index.ts",
+    "call": "tsx call-tool.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4"
