@@ -5,7 +5,7 @@ A filesystem-based progressive discovery system for Model Context Protocol (MCP)
 ## Architecture
 
 ```
-~/.mcp-servers/
+~/.mcp-catalogue/
 ├── package.json              # Project configuration
 ├── tsconfig.json             # TypeScript config
 ├── servers.json              # MCP server configurations
@@ -26,7 +26,7 @@ A filesystem-based progressive discovery system for Model Context Protocol (MCP)
 Dependencies are already installed. If you need to reinstall:
 
 ```bash
-cd ~/.mcp-servers
+cd ~/.mcp-catalogue
 pnpm install
 ```
 
@@ -65,7 +65,7 @@ To add a new MCP server:
 
 2. **Create server directory**
    ```bash
-   mkdir ~/.mcp-servers/new-server
+   mkdir ~/.mcp-catalogue/new-server
    ```
 
 3. **Create types.ts**
