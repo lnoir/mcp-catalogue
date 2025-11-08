@@ -14,8 +14,15 @@
 import { readdir, readFile, stat } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import serverConfig from './servers.json' with { type: 'json' };
+import { checkNodeVersion } from './check-node-version.js';
+import type { ServerRegistry } from './types.js';
+import serverConfigRaw from './servers.json' with { type: 'json' };
 import { initializeServer, listServerTools, closeAllServers } from './mcp-client.js';
+
+const serverConfig = serverConfigRaw as ServerRegistry;
+
+// Check Node version before doing anything
+checkNodeVersion();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

@@ -4,6 +4,9 @@
   "description": "Progressive MCP tool discovery",
   "type": "module",
   "packageManager": "pnpm@9.12.1",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "discover": "tsx index.ts",
     "call": "tsx call-tool.ts"

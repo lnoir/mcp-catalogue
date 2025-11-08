@@ -22,8 +22,15 @@
 
 import { readFile } from 'fs/promises';
 import { stdin } from 'process';
+import { checkNodeVersion } from './check-node-version.js';
 import { initializeServer, callMCPTool, closeAllServers } from './mcp-client.js';
-import serverConfig from './servers.json' with { type: 'json' };
+import type { ServerRegistry } from './types.js';
+import serverConfigRaw from './servers.json' with { type: 'json' };
+
+const serverConfig = serverConfigRaw as ServerRegistry;
+
+// Check Node version before doing anything
+checkNodeVersion();
 
 /**
  * Read data from stdin

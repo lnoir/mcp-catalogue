@@ -11,7 +11,10 @@ import { getDesignContext } from './servers/figma/index.js';
 import { takeSnapshot, navigatePage } from './servers/chrome-devtools/index.js';
 import { resolveLibraryId, getLibraryDocs } from './servers/context7/index.js';
 import { getCollections, createWorkspace } from './servers/postman/index.js';
-import serverConfig from './servers.json' with { type: 'json' };
+import type { ServerRegistry } from './types.js';
+import serverConfigRaw from './servers.json' with { type: 'json' };
+
+const serverConfig = serverConfigRaw as ServerRegistry;
 
 async function exampleCoretxUsage() {
   console.log('=== Coretx Example ===\n');
