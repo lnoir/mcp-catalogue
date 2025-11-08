@@ -54,6 +54,104 @@ pnpm run discover -- test coretx
 
 Run `pnpm run discover` to see all available servers and their tool counts. The discovery CLI is the source of truth - server availability depends on your environment.
 
+## Session Manager
+
+The session manager allows you to start persistent MCP servers that maintain state across multiple tool calls. This is essential for servers like `chrome-devtools` that require an active browser session.
+
+### Why Use Sessions?
+
+**Stateless servers** (like Coretx) can be called anytime via `pnpm run call`.
+
+**Session-based servers** (like Chrome DevTools, databases, file watchers) need persistent connections:
+- Browser automation requires maintaining browser state
+- Database connections need transaction context
+- File watchers need continuous monitoring
+
+### Session Commands
+
+```bash
+# Start a persistent session
+pnpm run session -- start <server-name>
+# Returns: Session started on http://localhost:PORT
+
+# Call a tool in the active session
+pnpm run session -- call <server-name> <tool-name> '<json-params>'
+
+# List all active sessions
+pnpm run session -- list
+
+# Stop a session and cleanup
+pnpm run session -- stop <server-name>
+```
+
+### Example: Browser Automation Workflow
+
+```bash
+# Start Chrome DevTools session
+pnpm run session -- start chrome-devtools
+# → Session 'chrome-devtools' started on http://localhost:3978
+
+# Navigate to a page
+pnpm run session -- call chrome-devtools navigate_page '{"url":"https://example.com"}'
+
+# Take a screenshot
+pnpm run session -- call chrome-devtools take_screenshot '{"fullPage":true}'
+
+# Check console messages
+pnpm run session -- call chrome-devtools list_console_messages '{}'
+
+# Stop the session when done
+pnpm run session -- stop chrome-devtools
+```
+
+### Architecture
+
+Each session:
+1. Spawns the MCP server as a stdio process
+2. Wraps it with a lightweight HTTP server on localhost
+3. Maintains the connection across multiple tool calls
+4. Provides graceful cleanup when stopped
+
+```
+AI Agent → CLI → Session Manager
+                       ↓
+          HTTP Wrapper (localhost:PORT)
+                       ↓
+          Stdio MCP Connection
+                       ↓
+          MCP Server (chrome, db, etc.)
+```
+
+### Use Cases
+
+**Browser Testing & Debugging**
+```bash
+# Start session, navigate, interact, screenshot, debug - all maintaining browser state
+pnpm run session -- start chrome-devtools
+pnpm run session -- call chrome-devtools navigate_page '{"url":"https://myapp.com"}'
+pnpm run session -- call chrome-devtools fill '{"selector":"#email","value":"test@example.com"}'
+pnpm run session -- call chrome-devtools click '{"selector":"#submit"}'
+pnpm run session -- call chrome-devtools take_screenshot '{}'
+```
+
+**Database Operations**
+```bash
+# Maintain transaction context across queries (when postgres-mcp is added)
+pnpm run session -- start postgres
+pnpm run session -- call postgres query '{"sql":"BEGIN"}'
+pnpm run session -- call postgres query '{"sql":"INSERT ..."}'
+pnpm run session -- call postgres query '{"sql":"COMMIT"}'
+```
+
+**File System Watching**
+```bash
+# Monitor build output over time (when file-watcher-mcp is added)
+pnpm run session -- start file-watcher
+pnpm run session -- call file-watcher watch '{"path":"./dist"}'
+# ... make code changes ...
+pnpm run session -- call file-watcher get_changes '{}'
+```
+
 ## Adding New Servers
 
 To add a new MCP server:

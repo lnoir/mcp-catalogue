@@ -2,6 +2,9 @@
  * Common types for MCP tool wrappers
  */
 
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Express } from 'express';
+
 export interface MCPToolResponse<T = unknown> {
   content: Array<{
     type: 'text' | 'image' | 'resource';
@@ -26,4 +29,15 @@ export interface MCPServerConfig {
 
 export interface ServerRegistry {
   [serverName: string]: MCPServerConfig;
+}
+
+/**
+ * Session management types
+ */
+export interface SessionInfo {
+  serverName: string;
+  port: number;
+  mcpClient: Client;
+  httpServer: Express;
+  startedAt: Date;
 }
