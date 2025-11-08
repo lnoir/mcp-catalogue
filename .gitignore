@@ -10,3 +10,6 @@ servers/*/
 
 # Environment-specific configs
 servers.json
+
+# Session state (runtime-specific)
+.sessions.json

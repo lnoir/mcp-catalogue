@@ -5,9 +5,15 @@
  * allowing AI agents to spawn, control, and terminate sessions on-demand.
  */
 
+import { readFile, writeFile } from 'fs/promises';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { initializeServer, closeAllServers } from './mcp-client.js';
 import { createSessionHTTPWrapper } from './session-http-wrapper.js';
-import type { SessionInfo, MCPServerConfig } from './types.js';
+import type { SessionInfo, MCPServerConfig, SessionsFile, SessionFileEntry } from './types.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const SESSIONS_FILE = join(__dirname, '.sessions.json');
 
 /**
  * Port allocation pool for sessions
@@ -20,6 +26,48 @@ const PORT_POOL = [3978, 3979, 3980, 3981, 3982];
 class MCPSessionManager {
   private sessions = new Map<string, SessionInfo>();
   private usedPorts = new Set<number>();
+
+  /**
+   * Load sessions from file
+   */
+  private async loadSessionsFromFile(): Promise<SessionsFile> {
+    try {
+      const content = await readFile(SESSIONS_FILE, 'utf-8');
+      return JSON.parse(content) as SessionsFile;
+    } catch (error) {
+      // File doesn't exist or is invalid, return empty
+      return {};
+    }
+  }
+
+  /**
+   * Save sessions to file
+   */
+  private async saveSessionsToFile(sessions: SessionsFile): Promise<void> {
+    try {
+      await writeFile(SESSIONS_FILE, JSON.stringify(sessions, null, 2), 'utf-8');
+    } catch (error) {
+      console.error('Failed to save sessions file:', error);
+    }
+  }
+
+  /**
+   * Add session to file
+   */
+  private async addSessionToFile(serverName: string, entry: SessionFileEntry): Promise<void> {
+    const sessions = await this.loadSessionsFromFile();
+    sessions[serverName] = entry;
+    await this.saveSessionsToFile(sessions);
+  }
+
+  /**
+   * Remove session from file
+   */
+  private async removeSessionFromFile(serverName: string): Promise<void> {
+    const sessions = await this.loadSessionsFromFile();
+    delete sessions[serverName];
+    await this.saveSessionsToFile(sessions);
+  }
 
   /**
    * Allocate an available port from the pool
@@ -76,6 +124,13 @@ class MCPSessionManager {
 
       this.sessions.set(serverName, sessionInfo);
 
+      // Save to file for persistence across CLI invocations
+      await this.addSessionToFile(serverName, {
+        port,
+        pid: process.pid,
+        startedAt: sessionInfo.startedAt.toISOString(),
+      });
+
       return `http://localhost:${port}`;
     } catch (error) {
       // Release port on failure
@@ -94,43 +149,73 @@ class MCPSessionManager {
    * @param serverName - Name of the server session to stop
    */
   async stop(serverName: string): Promise<void> {
-    const session = this.sessions.get(serverName);
+    // Check if session exists in file
+    const sessionInfo = await this.getSessionFromFile(serverName);
 
-    if (!session) {
+    if (!sessionInfo) {
       throw new Error(`No active session found for '${serverName}'`);
     }
 
-    try {
-      // Close HTTP server
-      await new Promise<void>((resolve, reject) => {
-        const server = (session.httpServer as any).listen?.();
-        if (server) {
-          server.close((err: Error | undefined) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        } else {
-          resolve();
+    const session = this.sessions.get(serverName);
+
+    if (session) {
+      // Session is in memory, clean up resources
+      try {
+        // Close HTTP server
+        await new Promise<void>((resolve, reject) => {
+          const server = (session.httpServer as any).listen?.();
+          if (server) {
+            server.close((err: Error | undefined) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          } else {
+            resolve();
+          }
+        });
+
+        // Close MCP client
+        await session.mcpClient.close();
+
+        // Release port
+        this.releasePort(session.port);
+
+        // Remove session
+        this.sessions.delete(serverName);
+      } catch (error) {
+        throw new Error(
+          `Failed to stop session '${serverName}': ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+    } else {
+      // Session exists in file but not in memory (different process)
+      // Try to kill the process if it's still running
+      try {
+        const { exec } = await import('child_process');
+        const { promisify } = await import('util');
+        const execAsync = promisify(exec);
+
+        // Check if process is still running
+        try {
+          await execAsync(`kill -0 ${sessionInfo.pid} 2>/dev/null`);
+          // Process exists, kill it
+          await execAsync(`kill ${sessionInfo.pid}`);
+          console.log(`Killed process ${sessionInfo.pid} for session '${serverName}'`);
+        } catch {
+          // Process doesn't exist, just clean up the file
+          console.log(`Process ${sessionInfo.pid} not running, cleaning up session file`);
         }
-      });
-
-      // Close MCP client
-      await session.mcpClient.close();
-
-      // Release port
-      this.releasePort(session.port);
-
-      // Remove session
-      this.sessions.delete(serverName);
-
-      console.log(`Session '${serverName}' stopped successfully`);
-    } catch (error) {
-      throw new Error(
-        `Failed to stop session '${serverName}': ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+      } catch (error) {
+        console.warn(`Warning: Could not kill process ${sessionInfo.pid}:`, error);
+      }
     }
+
+    // Remove from file
+    await this.removeSessionFromFile(serverName);
+
+    console.log(`\n✓ Session '${serverName}' stopped successfully\n`);
   }
 
   /**
@@ -171,19 +256,34 @@ class MCPSessionManager {
   }
 
   /**
+   * Get session info from file (for CLI commands)
+   *
+   * @param serverName - Name of the server
+   * @returns Session file entry or null if not found
+   */
+  async getSessionFromFile(serverName: string): Promise<SessionFileEntry | null> {
+    const sessions = await this.loadSessionsFromFile();
+    return sessions[serverName] || null;
+  }
+
+  /**
    * List all active sessions
    *
    * @returns Array of session information
    */
-  list(): Array<{ serverName: string; port: number; uptime: string }> {
-    return Array.from(this.sessions.values()).map((session) => {
-      const uptimeMs = Date.now() - session.startedAt.getTime();
+  async list(): Promise<Array<{ serverName: string; port: number; uptime: string; pid: number }>> {
+    const sessions = await this.loadSessionsFromFile();
+
+    return Object.entries(sessions).map(([serverName, session]) => {
+      const startedAt = new Date(session.startedAt);
+      const uptimeMs = Date.now() - startedAt.getTime();
       const uptimeSec = Math.floor(uptimeMs / 1000);
       const uptimeMin = Math.floor(uptimeSec / 60);
 
       return {
-        serverName: session.serverName,
+        serverName,
         port: session.port,
+        pid: session.pid,
         uptime: uptimeMin > 0 ? `${uptimeMin}m ${uptimeSec % 60}s` : `${uptimeSec}s`,
       };
     });
@@ -193,7 +293,8 @@ class MCPSessionManager {
    * Stop all sessions
    */
   async stopAll(): Promise<void> {
-    const serverNames = Array.from(this.sessions.keys());
+    const sessions = await this.loadSessionsFromFile();
+    const serverNames = Object.keys(sessions);
 
     for (const serverName of serverNames) {
       try {

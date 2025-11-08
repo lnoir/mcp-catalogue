@@ -41,3 +41,16 @@ export interface SessionInfo {
   httpServer: Express;
   startedAt: Date;
 }
+
+/**
+ * Session file persistence types
+ */
+export interface SessionFileEntry {
+  port: number;
+  pid: number;
+  startedAt: string;
+}
+
+export interface SessionsFile {
+  [serverName: string]: SessionFileEntry;
+}

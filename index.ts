@@ -252,8 +252,36 @@ async function sessionCall(serverName: string, toolName: string, paramsJson: str
   }
 
   try {
-    const result = await sessionManager.call(serverName, toolName, params);
-    console.log(JSON.stringify(result, null, 2));
+    // Get session info from file
+    const sessionInfo = await sessionManager.getSessionFromFile(serverName);
+
+    if (!sessionInfo) {
+      console.error(`\n✗ No active session found for '${serverName}'`);
+      console.error(`\nStart a session with: pnpm run session -- start ${serverName}\n`);
+      process.exit(1);
+    }
+
+    // Make HTTP request to session's HTTP wrapper
+    const url = `http://localhost:${sessionInfo.port}/tool/${toolName}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const result = await response.json() as { success: boolean; result?: any; error?: string };
+
+    if (!result.success) {
+      throw new Error(result.error || 'Unknown error');
+    }
+
+    console.log(JSON.stringify(result.result, null, 2));
   } catch (error) {
     console.error(`\n✗ Failed to call tool '${toolName}':`);
     console.error(error instanceof Error ? error.message : String(error));
@@ -264,8 +292,8 @@ async function sessionCall(serverName: string, toolName: string, paramsJson: str
 /**
  * List all active sessions
  */
-function sessionList() {
-  const sessions = sessionManager.list();
+async function sessionList() {
+  const sessions = await sessionManager.list();
 
   if (sessions.length === 0) {
     console.log('\nNo active sessions.');
@@ -278,6 +306,7 @@ function sessionList() {
   for (const session of sessions) {
     console.log(`  ${session.serverName}`);
     console.log(`    Port: ${session.port}`);
+    console.log(`    PID: ${session.pid}`);
     console.log(`    URL: http://localhost:${session.port}`);
     console.log(`    Uptime: ${session.uptime}\n`);
   }
@@ -343,7 +372,7 @@ async function handleSessionCommand() {
     }
 
     case 'list': {
-      sessionList();
+      await sessionList();
       break;
     }
 
