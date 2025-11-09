@@ -5,8 +5,9 @@
  * to an underlying stdio MCP connection, maintaining state across calls.
  */
 
-import express, { type Express, type Request, type Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Server } from 'http';
 
 /**
  * Create an HTTP wrapper for an MCP session
@@ -20,7 +21,7 @@ export function createSessionHTTPWrapper(
   serverName: string,
   mcpClient: Client,
   port: number
-): Express {
+): Server {
   const app = express();
 
   // Parse JSON bodies
@@ -66,9 +67,9 @@ export function createSessionHTTPWrapper(
   });
 
   // Start listening
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     console.log(`Session '${serverName}' started on http://localhost:${port}`);
   });
 
-  return app;
+  return server;
 }
