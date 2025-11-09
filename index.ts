@@ -79,17 +79,21 @@ async function extractDescription(filePath: string): Promise<string> {
  * List all available servers
  */
 async function listServers() {
-  console.log('\nAvailable MCP Servers:\n');
-
   const servers = await getServerNames();
+  const listings = await Promise.all(
+    servers.map(async server => {
+      const toolCount = await countTools(join(__dirname, 'servers', server));
+      return `  ${server} (${toolCount} tools)`;
+    })
+  );
 
-  for (const server of servers) {
-    const toolCount = await countTools(join(__dirname, 'servers', server));
-    console.log(`  ${server} (${toolCount} tools)`);
-  }
-
-  console.log('\nUsage: pnpm run discover -- list <server-name>');
-  console.log('       pnpm run discover -- info <server> <tool>\n');
+  console.log(
+    '\nAvailable MCP Servers:\n\n' +
+      listings.join('\n') +
+      '\n\nUsage:\n' +
+      '  pnpm run discover -- list <server-name>\n' +
+      '  pnpm run discover -- info <server> <tool>\n'
+  );
 }
 
 /**
@@ -105,20 +109,21 @@ async function listToolsInServer(serverName: string) {
     return;
   }
 
-  console.log(`\nTools in ${serverName}:\n`);
-
   const files = await readdir(serverDir);
   const toolFiles = files.filter(
     f => f.endsWith('.ts') && f !== 'index.ts' && f !== 'types.ts'
   );
 
-  for (const file of toolFiles.sort()) {
-    const toolName = file.replace('.ts', '');
-    const filePath = join(serverDir, file);
-    const description = await extractDescription(filePath);
-    console.log(`  ${toolName}`);
-    console.log(`    ${description}\n`);
-  }
+  const entries = await Promise.all(
+    toolFiles.sort().map(async file => {
+      const toolName = file.replace('.ts', '');
+      const filePath = join(serverDir, file);
+      const description = await extractDescription(filePath);
+      return `  ${toolName}\n    ${description}\n`;
+    })
+  );
+
+  console.log(`\nTools in ${serverName}:\n\n${entries.join('')}`);
 }
 
 /**
@@ -147,11 +152,12 @@ async function showToolInfo(serverName: string, toolName: string) {
         .trim()
     : 'No description available';
 
-  console.log(`\nTool: ${serverName}/${toolName}\n`);
-  console.log('Description:');
-  console.log(description);
-  console.log(`\nFile: ${toolFile}\n`);
-  console.log('See types.ts in the same directory for input/output type definitions.\n');
+  console.log(
+    `\nTool: ${serverName}/${toolName}\n` +
+      `Description:\n${description}\n\n` +
+      `File: ${toolFile}\n\n` +
+      'Check the top of this file for inline input/output type definitions.\n'
+  );
 }
 
 /**
@@ -161,32 +167,40 @@ async function testServerConnection(serverName: string) {
   const config = serverConfig[serverName as keyof typeof serverConfig];
 
   if (!config) {
-    console.error(`\nError: No configuration found for server "${serverName}".\n`);
-    console.log('Available servers:', Object.keys(serverConfig).join(', '));
+    console.error(
+      `\nError: No configuration found for server "${serverName}".\n` +
+        `Available servers: ${Object.keys(serverConfig).join(', ')}\n`
+    );
     return;
   }
 
-  console.log(`\nTesting connection to ${serverName}...\n`);
-  console.log('Config:', JSON.stringify(config, null, 2));
+  console.log(
+    `\nTesting connection to ${serverName}...\n` +
+      `Config: ${JSON.stringify(config, null, 2)}\n`
+  );
 
   try {
     await initializeServer(serverName, config);
     const tools = await listServerTools(serverName);
 
-    console.log(`\n✓ Successfully connected to ${serverName}`);
-    console.log(`\nTools available from server (${tools.length}):\n`);
+    const details = tools
+      .map(
+        (tool: any) =>
+          `  - ${tool.name}${tool.description ? `\n    ${tool.description}` : ''}`
+      )
+      .join('\n');
 
-    tools.forEach((tool: any) => {
-      console.log(`  - ${tool.name}`);
-      if (tool.description) {
-        console.log(`    ${tool.description}`);
-      }
-    });
+    console.log(
+      `\n✓ Successfully connected to ${serverName}\n\n` +
+        `Tools available from server (${tools.length}):\n\n${details}\n`
+    );
 
     await closeAllServers();
   } catch (error) {
-    console.error(`\n✗ Failed to connect to ${serverName}:`);
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(
+      `\n✗ Failed to connect to ${serverName}:\n` +
+        `${error instanceof Error ? error.message : String(error)}\n`
+    );
   }
 
   console.log();
@@ -203,20 +217,26 @@ async function sessionStart(serverName: string) {
   const config = serverConfig[serverName as keyof typeof serverConfig];
 
   if (!config) {
-    console.error(`\nError: Server "${serverName}" not found in servers.json\n`);
-    console.error('Available servers:', Object.keys(serverConfig).join(', '));
+    console.error(
+      `\nError: Server "${serverName}" not found in servers.json\n` +
+        `Available servers: ${Object.keys(serverConfig).join(', ')}\n`
+    );
     process.exit(1);
   }
 
   try {
     const url = await sessionManager.start(serverName, config);
-    console.log(`\n✓ Session '${serverName}' started successfully`);
-    console.log(`  URL: ${url}`);
-    console.log(`\nCall tools with:`);
-    console.log(`  pnpm run session -- call ${serverName} <tool-name> '<json-params>'\n`);
+    console.log(
+      `\n✓ Session '${serverName}' started successfully\n` +
+        `  URL: ${url}\n\n` +
+        'Call tools with:\n' +
+        `  pnpm run session -- call ${serverName} <tool-name> '<json-params>'\n`
+    );
   } catch (error) {
-    console.error(`\n✗ Failed to start session '${serverName}':`);
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(
+      `\n✗ Failed to start session '${serverName}':\n` +
+        `${error instanceof Error ? error.message : String(error)}\n`
+    );
     process.exit(1);
   }
 }
@@ -228,8 +248,10 @@ async function sessionStop(serverName: string) {
   try {
     await sessionManager.stop(serverName);
   } catch (error) {
-    console.error(`\n✗ Failed to stop session '${serverName}':`);
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(
+      `\n✗ Failed to stop session '${serverName}':\n` +
+        `${error instanceof Error ? error.message : String(error)}\n`
+    );
     process.exit(1);
   }
 }
@@ -245,8 +267,10 @@ async function sessionCall(serverName: string, toolName: string, paramsJson: str
     try {
       params = JSON.parse(paramsJson);
     } catch (error) {
-      console.error('\n✗ Failed to parse parameters as JSON');
-      console.error('Expected format: \'{"key":"value"}\'');
+      console.error(
+        '\n✗ Failed to parse parameters as JSON\n' +
+          'Expected format: \'{"key":"value"}\'\n'
+      );
       process.exit(1);
     }
   }
@@ -256,8 +280,10 @@ async function sessionCall(serverName: string, toolName: string, paramsJson: str
     const sessionInfo = await sessionManager.getSessionFromFile(serverName);
 
     if (!sessionInfo) {
-      console.error(`\n✗ No active session found for '${serverName}'`);
-      console.error(`\nStart a session with: pnpm run session -- start ${serverName}\n`);
+      console.error(
+        `\n✗ No active session found for '${serverName}'\n` +
+          `Start a session with: pnpm run session -- start ${serverName}\n`
+      );
       process.exit(1);
     }
 
@@ -283,8 +309,10 @@ async function sessionCall(serverName: string, toolName: string, paramsJson: str
 
     console.log(JSON.stringify(result.result, null, 2));
   } catch (error) {
-    console.error(`\n✗ Failed to call tool '${toolName}':`);
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(
+      `\n✗ Failed to call tool '${toolName}':\n` +
+        `${error instanceof Error ? error.message : String(error)}\n`
+    );
     process.exit(1);
   }
 }
@@ -296,22 +324,28 @@ async function sessionList() {
   const sessions = await sessionManager.list();
 
   if (sessions.length === 0) {
-    console.log('\nNo active sessions.');
-    console.log('\nStart a session with: pnpm run session -- start <server-name>\n');
+    console.log(
+      '\nNo active sessions.\n\n' +
+        'Start a session with: pnpm run session -- start <server-name>\n'
+    );
     return;
   }
 
-  console.log('\nActive Sessions:\n');
+  const details = sessions
+    .map(
+      session =>
+        `  ${session.serverName}\n` +
+        `    Port: ${session.port}\n` +
+        `    PID: ${session.pid}\n` +
+        `    URL: http://localhost:${session.port}\n` +
+        `    Uptime: ${session.uptime}\n`
+    )
+    .join('\n');
 
-  for (const session of sessions) {
-    console.log(`  ${session.serverName}`);
-    console.log(`    Port: ${session.port}`);
-    console.log(`    PID: ${session.pid}`);
-    console.log(`    URL: http://localhost:${session.port}`);
-    console.log(`    Uptime: ${session.uptime}\n`);
-  }
-
-  console.log('Call tools with: pnpm run session -- call <server> <tool> \'<params>\'\n');
+  console.log(
+    `\nActive Sessions:\n\n${details}\n` +
+      "Call tools with: pnpm run session -- call <server> <tool> '<params>'\n"
+  );
 }
 
 /**
@@ -321,15 +355,17 @@ async function handleSessionCommand() {
   const subcommand = args[0];
 
   if (!subcommand || subcommand === 'help') {
-    console.log('\nSession Management Commands:\n');
-    console.log('  pnpm run session -- start <server>           Start a persistent session');
-    console.log('  pnpm run session -- stop <server>            Stop a session');
-    console.log('  pnpm run session -- call <server> <tool> <params>  Call a tool');
-    console.log('  pnpm run session -- list                     List active sessions');
-    console.log('\nExample:');
-    console.log('  pnpm run session -- start chrome-devtools');
-    console.log('  pnpm run session -- call chrome-devtools navigate_page \'{"url":"https://example.com"}\'');
-    console.log('  pnpm run session -- stop chrome-devtools\n');
+    console.log(
+      '\nSession Management Commands:\n\n' +
+        '  pnpm run session -- start <server>           Start a persistent session\n' +
+        '  pnpm run session -- stop <server>            Stop a session\n' +
+        '  pnpm run session -- call <server> <tool> <params>  Call a tool\n' +
+        '  pnpm run session -- list                     List active sessions\n\n' +
+        'Example:\n' +
+        '  pnpm run session -- start chrome-devtools\n' +
+        '  pnpm run session -- call chrome-devtools navigate_page \'{"url":"https://example.com"}\'\n' +
+        '  pnpm run session -- stop chrome-devtools\n'
+    );
     return;
   }
 
@@ -337,8 +373,10 @@ async function handleSessionCommand() {
     case 'start': {
       const serverName = args[1];
       if (!serverName) {
-        console.error('\nError: Please specify a server name.\n');
-        console.log('Usage: pnpm run session -- start <server-name>\n');
+        console.error(
+          '\nError: Please specify a server name.\n' +
+            'Usage: pnpm run session -- start <server-name>\n'
+        );
         process.exit(1);
       }
       await sessionStart(serverName);
@@ -348,8 +386,10 @@ async function handleSessionCommand() {
     case 'stop': {
       const serverName = args[1];
       if (!serverName) {
-        console.error('\nError: Please specify a server name.\n');
-        console.log('Usage: pnpm run session -- stop <server-name>\n');
+        console.error(
+          '\nError: Please specify a server name.\n' +
+            'Usage: pnpm run session -- stop <server-name>\n'
+        );
         process.exit(1);
       }
       await sessionStop(serverName);
@@ -362,8 +402,10 @@ async function handleSessionCommand() {
       const paramsJson = args[3];
 
       if (!serverName || !toolName) {
-        console.error('\nError: Please specify server and tool names.\n');
-        console.log('Usage: pnpm run session -- call <server> <tool> \'<json-params>\'\n');
+        console.error(
+          '\nError: Please specify server and tool names.\n' +
+            "Usage: pnpm run session -- call <server> <tool> '<json-params>'\n"
+        );
         process.exit(1);
       }
 
@@ -377,8 +419,10 @@ async function handleSessionCommand() {
     }
 
     default:
-      console.error(`\nError: Unknown session command "${subcommand}"\n`);
-      console.log('Run "pnpm run session" for help.\n');
+      console.error(
+        `\nError: Unknown session command "${subcommand}"\n` +
+          'Run "pnpm run session" for help.\n'
+      );
       process.exit(1);
   }
 }
@@ -400,8 +444,10 @@ async function main() {
     } else if (command === 'list') {
       const serverName = args[1];
       if (!serverName) {
-        console.error('\nError: Please specify a server name.\n');
-        console.log('Usage: pnpm run discover -- list <server-name>\n');
+        console.error(
+          '\nError: Please specify a server name.\n' +
+            'Usage: pnpm run discover -- list <server-name>\n'
+        );
         return;
       }
       await listToolsInServer(serverName);
@@ -409,16 +455,20 @@ async function main() {
       const serverName = args[1];
       const toolName = args[2];
       if (!serverName || !toolName) {
-        console.error('\nError: Please specify both server and tool names.\n');
-        console.log('Usage: pnpm run discover -- info <server> <tool>\n');
+        console.error(
+          '\nError: Please specify both server and tool names.\n' +
+            'Usage: pnpm run discover -- info <server> <tool>\n'
+        );
         return;
       }
       await showToolInfo(serverName, toolName);
     } else if (command === 'test') {
       const serverName = args[1];
       if (!serverName) {
-        console.error('\nError: Please specify a server name.\n');
-        console.log('Usage: pnpm run discover -- test <server-name>\n');
+        console.error(
+          '\nError: Please specify a server name.\n' +
+            'Usage: pnpm run discover -- test <server-name>\n'
+        );
         return;
       }
       await testServerConnection(serverName);
@@ -427,7 +477,9 @@ async function main() {
       await listServers();
     }
   } catch (error) {
-    console.error('\nError:', error instanceof Error ? error.message : String(error));
+    console.error(
+      `\nError: ${error instanceof Error ? error.message : String(error)}\n`
+    );
     process.exit(1);
   }
 }
