@@ -48,42 +48,28 @@ For local development:
 mkdir ~/.mcp-catalogue/servers/your-server-name
 ```
 
-### 4. Create `types.ts`
+### 4. Define tool types inline
 
-Define TypeScript interfaces for all tool inputs and outputs:
+Keep each tool’s input/output interfaces next to its wrapper so people (and AI
+agents) can see everything in one place. Document parameters with concise
+inline comments:
 
 ```typescript
-/**
- * Type definitions for Your Server MCP tools
- */
-
-// Tool 1
-export interface Tool1Input {
-  param1: string;
-  param2?: number;
+export interface ResolveLibraryInput {
+  libraryName: string; // Exact library name (e.g. "react")
+  version?: string; // Optional semver range, defaults to latest
 }
 
-export interface Tool1Response {
-  result: string;
-  success: boolean;
+export interface ResolveLibraryResponse {
+  id: string;
+  summary: string;
 }
-
-// Tool 2
-export interface Tool2Input {
-  query: string;
-}
-
-export interface Tool2Response {
-  data: any[];
-  count: number;
-}
-
-// Add more tools...
 ```
 
-**Naming Convention**:
-- Inputs: `ToolNameInput`
-- Responses: `ToolNameResponse`
+This makes the tool file self-contained—no need for a separate `types.ts`. **Do not
+re-export these interfaces in `index.ts`**—keep them local to the tool file so
+names don’t collide when other tools define similarly named shapes (e.g.
+multiple `TimelineEntry` interfaces).
 
 ### 5. Create Tool Wrapper Files
 
@@ -93,49 +79,52 @@ Create one file per tool (e.g., `tool-1.ts`):
 /**
  * Brief description of what this tool does
  *
- * Parameters:
- * - param1: string (required) - Description of param1
- * - param2: number (optional) - Description of param2, defaults to 10
- *
- * Example:
- * ```json
- * {
- *   "param1": "example-value",
- *   "param2": 42
- * }
- * ```
+ * Add any gotchas or usage hints here; this block shows up in discovery output.
  */
 
-export const description = 'Brief description of what this tool does';
+import { callMCPTool } from '../../mcp-client.js';
+import type { MCPToolResponse } from '../../types.js';
 
-export const inputSchema = {
-  param1: { type: 'string', required: true, description: 'Description of param1' },
-  param2: { type: 'number', required: false, description: 'Description of param2, defaults to 10' },
-};
+export interface ToolInput {
+  param1: string; // Description of param1 and required format
+  param2?: number; // Optional parameter, defaults to 10
+}
+
+export interface ToolResponse {
+  result: string;
+  success: boolean;
+}
+
+export async function toolName(
+  input: ToolInput
+): Promise<MCPToolResponse<ToolResponse>> {
+  return callMCPTool<ToolResponse>('server-name', 'tool_name', input);
+}
 ```
 
 **Critical: Document Parameters Accurately**
 
-The parameter documentation is **essential** for usability. Without it, users (including AI agents) have to guess parameter names and types through trial-and-error.
-
-For each parameter, document:
-1. **Name** - Exact parameter name the server expects
-2. **Type** - string, number, boolean, array, object
-3. **Required** - Whether it's required or optional
-4. **Description** - What it does, format requirements, valid values
-5. **Example** - Show a complete, working example
+Inline comments on each property replace the old `inputSchema` table. Make sure
+you cover:
+1. Exact parameter names
+2. Whether they’re required or optional (and default values)
+3. Format expectations (comma-separated, ISO date, etc.)
+4. Any authentication requirements (e.g., `access_key` optional)  
 
 **How to find accurate parameters:**
-- Use `pnpm run discover -- test your-server-name` to connect and see what the server expects
-- Check the server's source code or documentation
-- Make test calls and observe error messages about missing/invalid fields
-- For remote servers, trial-and-error may be necessary - document what you learn!
+- Use `pnpm run discover -- test your-server-name` to inspect tool schemas
+- Check the upstream server’s source code or docs
+- Make test calls and watch for validation errors
+- Document what you learn directly in the interface
 
 **Important**:
-- Function name: camelCase (`tool1`)
-- MCP tool name: snake_case (`'tool_1'`)
+- Function name: camelCase (`toolName`)
+- MCP tool name: snake_case (`'tool_name'`)
 - Server name: kebab-case (`'your-server-name'`)
-- Include comprehensive JSDoc with parameters and examples
+- Keep everything in one file: JSDoc, interfaces, and the wrapper function
+- Avoid `export *` re-exports of types in `index.ts`; import the tool function
+  directly (`export { toolName } from './tool-name.js'`) so interfaces with the
+  same name in different files don’t collide.
 
 ### 6. Create `index.ts`
 
@@ -148,10 +137,9 @@ Re-export all tools:
  * Brief description of what this server does
  */
 
-export * from './types.js';
-export * from './tool-1.js';
-export * from './tool-2.js';
-// ... export all tools
+export { tool1 } from './tool-1.js';
+export { tool2 } from './tool-2.js';
+// ... export all tool functions
 
 export const YOUR_SERVER_TOOLS = [
   'tool-1',
@@ -210,33 +198,28 @@ Here's how chrome-devtools was added:
 ```
 servers/chrome-devtools/
 ├── index.ts
-├── types.ts
 ├── navigate-page.ts
 ├── take-screenshot.ts
 └── ... (18 more tools)
 ```
 
-3. **Type Definition** (`types.ts`):
-```typescript
-export interface NavigatePageInput {
-  url: string;
-}
-
-export interface NavigatePageResponse {
-  success: boolean;
-  url: string;
-}
-```
-
-4. **Tool Wrapper** (`navigate-page.ts`):
+3. **Tool Wrapper** (`navigate-page.ts`):
 ```typescript
 /**
  * Navigate to a URL
  */
 
 import { callMCPTool } from '../../mcp-client.js';
-import type { NavigatePageInput, NavigatePageResponse } from './types.js';
 import type { MCPToolResponse } from '../../types.js';
+
+export interface NavigatePageInput {
+  url: string; // Absolute URL to open
+}
+
+export interface NavigatePageResponse {
+  success: boolean;
+  url: string;
+}
 
 export async function navigatePage(
   input: NavigatePageInput
@@ -245,9 +228,8 @@ export async function navigatePage(
 }
 ```
 
-5. **Index** (`index.ts`):
+4. **Index** (`index.ts`):
 ```typescript
-export * from './types.js';
 export * from './navigate-page.js';
 export * from './take-screenshot.js';
 // ... all 20 tools

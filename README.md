@@ -62,15 +62,20 @@ pnpm run session -- stop chrome-devtools
 │   └── adding-servers.md
 └── servers/              # Server implementations
     ├── coretx/
-    │   ├── types.ts
-    │   ├── get-ai-notes.ts
+    │   ├── coretx_get_ai_notes.ts
+    │   ├── coretx_create_session.ts
     │   └── index.ts
     └── chrome-devtools/
-        ├── types.ts
         ├── navigate-page.ts
         ├── take-screenshot.ts
         └── index.ts
 ```
+
+Each tool file documents its own input/output interfaces right next to the
+`callMCPTool()` wrapper, keeping discovery metadata, validation notes, and types
+co-located. To avoid duplicate type names leaking through a barrel, re-export
+only the callable wrappers (e.g., `export { createSession } from './coretx_create_session.js'`)
+and keep the interfaces local to their files.
 
 ## Available Servers
 

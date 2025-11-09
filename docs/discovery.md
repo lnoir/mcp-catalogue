@@ -59,10 +59,9 @@ The discovery system organizes tools in a hierarchical filesystem structure:
 ~/.mcp-catalogue/
 └── servers/
     └── example-server/
-        ├── index.ts          # Re-exports all tools
-        ├── types.ts          # Server-specific types
-        ├── tool-name.ts      # Individual tool wrapper
-        └── ...               # More tool files
+        ├── index.ts              # Re-exports all tools
+        ├── example_tool.ts       # Individual tool wrapper (with types inline)
+        └── ...                   # More tool files
 ```
 
 Each tool wrapper is a small file that calls `callMCPTool()` with the appropriate parameters. This keeps individual tools discoverable without loading everything into memory.
@@ -77,8 +76,16 @@ Each tool file follows a consistent pattern:
  */
 
 import { callMCPTool } from '../../mcp-client.js';
-import type { ToolInput, ToolResponse } from './types.js';
 import type { MCPToolResponse } from '../../types.js';
+
+export interface ToolInput {
+  query: string; // Exact parameter name & explanation
+  limit?: number; // Optional parameter details inline
+}
+
+export interface ToolResponse {
+  success: boolean;
+}
 
 export async function toolName(
   input: ToolInput
@@ -87,7 +94,13 @@ export async function toolName(
 }
 ```
 
-The JSDoc comment at the top is what appears in discovery listings.
+Document inputs/outputs directly on the interface properties—the discovery CLI
+will surface the top-of-file JSDoc comment, and the inline comments keep
+parameter guidance close to the code.
+
+> Tip: keep these interfaces local to the tool file and avoid re-exporting them
+> from `index.ts`. When every tool owns names like `TimelineEntry`, re-exporting
+> all symbols would cause conflicts for downstream consumers.
 
 ## Available Servers
 
