@@ -98,6 +98,7 @@ export interface ToolResponse {
 export async function toolName(
   input: ToolInput
 ): Promise<MCPToolResponse<ToolResponse>> {
+  // Use the EXACT tool name the MCP server expects (usually snake_case)
   return callMCPTool<ToolResponse>('server-name', 'tool_name', input);
 }
 ```
@@ -118,13 +119,17 @@ you cover:
 - Document what you learn directly in the interface
 
 **Important**:
-- Function name: camelCase (`toolName`)
-- MCP tool name: snake_case (`'tool_name'`)
+- File name: kebab-case (`tool-name.ts`) - **Used for discovery/browsing**
+- Function name: camelCase (`toolName`) - **Used when importing in TypeScript**
+- MCP tool name: **Match the upstream server exactly** (check with `pnpm run discover -- test`)
+  - Most servers use snake_case (`'tool_name'`)
+  - Some use camelCase (`'toolName'`)
+  - File naming is for our organization, not the tool name
 - Server name: kebab-case (`'your-server-name'`)
 - Keep everything in one file: JSDoc, interfaces, and the wrapper function
 - Avoid `export *` re-exports of types in `index.ts`; import the tool function
   directly (`export { toolName } from './tool-name.js'`) so interfaces with the
-  same name in different files don’t collide.
+  same name in different files don't collide.
 
 ### 6. Create `index.ts`
 
@@ -169,13 +174,15 @@ pnpm run discover -- info your-server-name tool-1
 
 For stateless servers:
 ```bash
-pnpm run call your-server-name tool_1 '{"param1":"value"}'
+# Use the exact MCP tool name (usually snake_case)
+pnpm run call your-server-name tool_name '{"param1":"value"}'
 ```
 
 For session-based servers:
 ```bash
 pnpm run session -- start your-server-name
-pnpm run session -- call your-server-name tool_1 '{"param1":"value"}'
+# Use the exact MCP tool name (usually snake_case)
+pnpm run session -- call your-server-name tool_name '{"param1":"value"}'
 pnpm run session -- stop your-server-name
 ```
 

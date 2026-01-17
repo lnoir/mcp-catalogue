@@ -41,7 +41,7 @@ pnpm run discover -- info chrome-devtools navigate-page
 pnpm run session -- start chrome-devtools
 
 # Navigate and screenshot
-pnpm run session -- call chrome-devtools navigate_page '{"url":"https://example.com"}'
+pnpm run session -- call chrome-devtools navigate_page '{"type":"url","url":"https://example.com"}'
 pnpm run session -- call chrome-devtools take_screenshot '{}'
 
 # Stop when done
