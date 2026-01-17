@@ -22,6 +22,7 @@ import { checkNodeVersion } from './check-node-version.js';
 import type { ServerRegistry } from './types.js';
 import serverConfigRaw from './servers.json' with { type: 'json' };
 import { initializeServer, listServerTools, closeAllServers } from './mcp-client.js';
+import { extractInputSchema, formatSchema } from './utils/extract-type-schema.js';
 import { sessionManager } from './session-manager.js';
 
 const serverConfig = serverConfigRaw as ServerRegistry;
@@ -152,11 +153,15 @@ async function showToolInfo(serverName: string, toolName: string) {
         .trim()
     : 'No description available';
 
+  // Extract parameter schema using AST
+  const schema = await extractInputSchema(toolFile);
+  const schemaOutput = schema ? `\n${formatSchema(schema)}\n` : '';
+
   console.log(
     `\nTool: ${serverName}/${toolName}\n` +
-      `Description:\n${description}\n\n` +
-      `File: ${toolFile}\n\n` +
-      'Check the top of this file for inline input/output type definitions.\n'
+      `Description:\n${description}\n` +
+      schemaOutput +
+      `\nFile: ${toolFile}\n`
   );
 }
 
